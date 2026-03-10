@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>メモ帳</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f2f5;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── ヘッダー ── */
+    header {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 0 16px;
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      min-height: 48px;
+    }
+
+    /* ── タブ ── */
+    #tabs {
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      flex: 1;
+      overflow-x: auto;
+      padding-top: 8px;
+      scrollbar-width: none;
+    }
+    #tabs::-webkit-scrollbar { display: none; }
+
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px 6px 14px;
+      border: 1px solid #d0d0d0;
+      border-bottom: none;
+      border-radius: 6px 6px 0 0;
+      background: #f5f5f5;
+      cursor: pointer;
+      white-space: nowrap;
+      font-size: 13px;
+      color: #555;
+      max-width: 160px;
+      transition: background 0.15s;
+    }
+    .tab:hover { background: #eaeaea; }
+    .tab.active {
+      background: #fff;
+      color: #111;
+      border-color: #c0c0c0;
+      font-weight: 600;
+    }
+
+    .tab-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      min-width: 0;
+      outline: none;
+      background: transparent;
+      border: none;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+    }
+    .tab.active .tab-title { cursor: text; }
+
+    .tab-close {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: #999;
+      font-size: 14px;
+      line-height: 1;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .tab-close:hover { background: #ddd; color: #333; }
+
+    #add-tab {
+      align-self: center;
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border: 1px dashed #bbb;
+      border-radius: 50%;
+      background: none;
+      cursor: pointer;
+      font-size: 18px;
+      color: #888;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    #add-tab:hover { background: #eee; color: #333; }
+
+    /* ── ツールバー ── */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      padding: 8px 16px;
+      gap: 8px;
+      background: #fff;
+      border-bottom: 1px solid #e8e8e8;
+    }
+
+    #save-status {
+      font-size: 12px;
+      color: #999;
+      flex: 1;
+    }
+    #save-status.saved { color: #4caf50; }
+    #save-status.unsaved { color: #ff9800; }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border: 1px solid #d0d0d0;
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      color: #333;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: #f5f5f5; }
+    .btn.primary {
+      background: #4a90d9;
+      border-color: #3a7fc1;
+      color: #fff;
+    }
+    .btn.primary:hover { background: #3a7fc1; }
+    .btn.danger { color: #d32f2f; border-color: #e57373; }
+    .btn.danger:hover { background: #fdecea; }
+
+    /* ── エディタ ── */
+    #editor-wrap {
+      flex: 1;
+      display: flex;
+      padding: 16px;
+      min-height: 0;
+    }
+
+    #editor {
+      flex: 1;
+      border: 1px solid #d8d8d8;
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-size: 15px;
+      line-height: 1.7;
+      resize: none;
+      outline: none;
+      background: #fff;
+      color: #222;
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    #editor::placeholder { color: #bbb; }
+
+    /* ── コピー完了トースト ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #323232;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 999;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div id="tabs"></div>
+  <button id="add-tab" title="新しいタブを追加">+</button>
+</header>
+
+<div id="toolbar">
+  <span id="save-status">読み込み中...</span>
+  <button class="btn" id="btn-copy" title="全文をクリップボードにコピー">
+    📋 全文コピー
+  </button>
+  <button class="btn danger" id="btn-clear" title="このタブの内容を消去">
+    🗑 消去
+  </button>
+</div>
+
+<div id="editor-wrap">
+  <textarea id="editor" placeholder="ここにメモを入力..."></textarea>
+</div>
+
+<div id="toast">コピーしました！</div>
+
+<script>
+  /* ══════════════════════════════════════════
+     状態
+  ══════════════════════════════════════════ */
+  const STORAGE_KEY = 'memo-app-v1';
+
+  let state = load();  // { tabs: [{id, title, content}], activeId }
+  let saveTimer = null;
+
+  /* ══════════════════════════════════════════
+     永続化
+  ══════════════════════════════════════════ */
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s.tabs && s.tabs.length && s.activeId) return s;
+      }
+    } catch (_) {}
+    const id = uid();
+    return { tabs: [{ id, title: 'メモ 1', content: '' }], activeId: id };
+  }
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    setStatus('saved', '保存しました');
+  }
+
+  function scheduleSave() {
+    setStatus('unsaved', '編集中...');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 800);
+  }
+
+  function setStatus(type, text) {
+    const el = document.getElementById('save-status');
+    el.className = type;
+    el.textContent = text;
+  }
+
+  /* ══════════════════════════════════════════
+     ユーティリティ
+  ══════════════════════════════════════════ */
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function activeTab() {
+    return state.tabs.find(t => t.id === state.activeId);
+  }
+
+  /* ══════════════════════════════════════════
+     タブ描画
+  ══════════════════════════════════════════ */
+  function renderTabs() {
+    const container = document.getElementById('tabs');
+    container.innerHTML = '';
+
+    state.tabs.forEach(tab => {
+      const el = document.createElement('div');
+      el.className = 'tab' + (tab.id === state.activeId ? ' active' : '');
+      el.dataset.id = tab.id;
+
+      // タイトル (ダブルクリックで編集)
+      const titleEl = document.createElement('span');
+      titleEl.className = 'tab-title';
+      titleEl.textContent = tab.title;
+      titleEl.title = tab.title;
+      titleEl.addEventListener('click', () => switchTab(tab.id));
+      titleEl.addEventListener('dblclick', e => { e.stopPropagation(); startRenameTab(tab.id, titleEl); });
+
+      // 閉じるボタン
+      const closeEl = document.createElement('button');
+      closeEl.className = 'tab-close';
+      closeEl.textContent = '×';
+      closeEl.title = 'このタブを閉じる';
+      closeEl.addEventListener('click', e => { e.stopPropagation(); removeTab(tab.id); });
+
+      el.appendChild(titleEl);
+      el.appendChild(closeEl);
+      container.appendChild(el);
+    });
+
+    // アクティブタブをスクロール表示
+    const activeEl = container.querySelector('.tab.active');
+    if (activeEl) activeEl.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }
+
+  function renderEditor() {
+    const tab = activeTab();
+    const editor = document.getElementById('editor');
+    editor.value = tab ? tab.content : '';
+  }
+
+  function render() {
+    renderTabs();
+    renderEditor();
+    setStatus('saved', '保存済み');
+  }
+
+  /* ══════════════════════════════════════════
+     タブ操作
+  ══════════════════════════════════════════ */
+  function addTab() {
+    const n = state.tabs.length + 1;
+    const id = uid();
+    state.tabs.push({ id, title: `メモ ${n}`, content: '' });
+    state.activeId = id;
+    save();
+    render();
+    document.getElementById('editor').focus();
+  }
+
+  function switchTab(id) {
+    if (state.activeId === id) return;
+    // 現在の内容を保存してから切り替え
+    const cur = activeTab();
+    if (cur) cur.content = document.getElementById('editor').value;
+    state.activeId = id;
+    save();
+    render();
+    document.getElementById('editor').focus();
+  }
+
+  function removeTab(id) {
+    if (state.tabs.length === 1) {
+      // 最後の1枚は内容クリアのみ
+      state.tabs[0].content = '';
+      state.tabs[0].title = 'メモ 1';
+      save();
+      render();
+      return;
+    }
+    const idx = state.tabs.findIndex(t => t.id === id);
+    state.tabs.splice(idx, 1);
+    if (state.activeId === id) {
+      state.activeId = state.tabs[Math.min(idx, state.tabs.length - 1)].id;
+    }
+    save();
+    render();
+  }
+
+  function startRenameTab(id, titleEl) {
+    const tab = state.tabs.find(t => t.id === id);
+    if (!tab) return;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = tab.title;
+    input.style.cssText = 'width:100px;font:inherit;border:none;outline:1px solid #4a90d9;border-radius:3px;padding:1px 4px;background:#fff;';
+
+    titleEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const commit = () => {
+      tab.title = input.value.trim() || tab.title;
+      save();
+      render();
+    };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { e.preventDefault(); render(); }
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     エディタイベント
+  ══════════════════════════════════════════ */
+  document.getElementById('editor').addEventListener('input', e => {
+    const tab = activeTab();
+    if (tab) tab.content = e.target.value;
+    scheduleSave();
+  });
+
+  /* ══════════════════════════════════════════
+     ボタン
+  ══════════════════════════════════════════ */
+  document.getElementById('add-tab').addEventListener('click', addTab);
+
+  document.getElementById('btn-copy').addEventListener('click', async () => {
+    const text = document.getElementById('editor').value;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_) {
+      // フォールバック
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    showToast('コピーしました！');
+  });
+
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    if (!document.getElementById('editor').value) return;
+    if (confirm('このタブの内容をすべて消去しますか？')) {
+      document.getElementById('editor').value = '';
+      const tab = activeTab();
+      if (tab) tab.content = '';
+      save();
+      setStatus('saved', '保存しました');
+    }
+  });
+
+  /* ══════════════════════════════════════════
+     トースト
+  ══════════════════════════════════════════ */
+  let toastTimer = null;
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+  }
+
+  /* ══════════════════════════════════════════
+     キーボードショートカット
+  ══════════════════════════════════════════ */
+  document.addEventListener('keydown', e => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key === 't') { e.preventDefault(); addTab(); }          // Ctrl+T: 新規タブ
+    if (mod && e.key === 'w') { e.preventDefault(); removeTab(state.activeId); } // Ctrl+W: タブを閉じる
+    if (mod && e.shiftKey && e.key === 'C') { e.preventDefault(); document.getElementById('btn-copy').click(); } // Ctrl+Shift+C: コピー
+    // Ctrl+1〜9 でタブ切替
+    if (mod && e.key >= '1' && e.key <= '9') {
+      const idx = parseInt(e.key) - 1;
+      if (state.tabs[idx]) { e.preventDefault(); switchTab(state.tabs[idx].id); }
+    }
+  });
+
+  /* ══════════════════════════════════════════
+     初期描画
+  ══════════════════════════════════════════ */
+  render();
+  document.getElementById('editor').focus();
+</script>
+</body>
+</html>
